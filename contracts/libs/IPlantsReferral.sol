@@ -2,7 +2,7 @@
 
 pragma solidity 0.6.12;
 
-interface IPantherReferral {
+interface IPlantsReferral {
     /**
      * @dev Record referral.
      */
@@ -11,7 +11,8 @@ interface IPantherReferral {
     /**
      * @dev Record referral commission.
      */
-    function recordReferralCommission(address referrer, uint256 commission) external;
+    function recordReferralCommission(address referrer, uint256 commission)
+        external;
 
     /**
      * @dev Get the referrer address that referred the user.

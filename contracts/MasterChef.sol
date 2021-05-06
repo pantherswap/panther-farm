@@ -5,13 +5,13 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./libs/IBEP20.sol";
 import "./libs/SafeBEP20.sol";
-import "./libs/IPantherReferral.sol";
+import "./libs/IPlantsReferral.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "./PantherToken.sol";
+import "./PlantsToken.sol";
 
-// MasterChef is the master of Panther. He can make Panther and he is a fair guy.
+// MasterChef is the master of Plants. He can make Plants and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
 // will be transferred to a governance smart contract once PANTHER is sufficiently
@@ -24,18 +24,18 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Info of each user.
     struct UserInfo {
-        uint256 amount;         // How many LP tokens the user has provided.
-        uint256 rewardDebt;     // Reward debt. See explanation below.
-        uint256 rewardLockedUp;  // Reward locked up.
+        uint256 amount; // How many LP tokens the user has provided.
+        uint256 rewardDebt; // Reward debt. See explanation below.
+        uint256 rewardLockedUp; // Reward locked up.
         uint256 nextHarvestUntil; // When can the user harvest again.
         //
         // We do some fancy math here. Basically, any point in time, the amount of PANTHERs
         // entitled to a user but is pending to be distributed is:
         //
-        //   pending reward = (user.amount * pool.accPantherPerShare) - user.rewardDebt
+        //   pending reward = (user.amount * pool.accPlantsPerShare) - user.rewardDebt
         //
         // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-        //   1. The pool's `accPantherPerShare` (and `lastRewardBlock`) gets updated.
+        //   1. The pool's `accPlantsPerShare` (and `lastRewardBlock`) gets updated.
         //   2. User receives the pending reward sent to his/her address.
         //   3. User's `amount` gets updated.
         //   4. User's `rewardDebt` gets updated.
@@ -43,23 +43,23 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Info of each pool.
     struct PoolInfo {
-        IBEP20 lpToken;           // Address of LP token contract.
-        uint256 allocPoint;       // How many allocation points assigned to this pool. PANTHERs to distribute per block.
-        uint256 lastRewardBlock;  // Last block number that PANTHERs distribution occurs.
-        uint256 accPantherPerShare;   // Accumulated PANTHERs per share, times 1e12. See below.
-        uint16 depositFeeBP;      // Deposit fee in basis points
-        uint256 harvestInterval;  // Harvest interval in seconds
+        IBEP20 lpToken; // Address of LP token contract.
+        uint256 allocPoint; // How many allocation points assigned to this pool. PANTHERs to distribute per block.
+        uint256 lastRewardBlock; // Last block number that PANTHERs distribution occurs.
+        uint256 accPlantsPerShare; // Accumulated PANTHERs per share, times 1e12. See below.
+        uint16 depositFeeBP; // Deposit fee in basis points
+        uint256 harvestInterval; // Harvest interval in seconds
     }
 
     // The PANTHER TOKEN!
-    PantherToken public panther;
+    PlantsToken public plants;
     // Dev address.
     address public devAddress;
     // Deposit Fee address
     address public feeAddress;
     // PANTHER tokens created per block.
-    uint256 public pantherPerBlock;
-    // Bonus muliplier for early panther makers.
+    uint256 public plantsPerBlock;
+    // Bonus muliplier for early plants makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
     // Max harvest interval: 14 days.
     uint256 public constant MAXIMUM_HARVEST_INTERVAL = 14 days;
@@ -75,8 +75,8 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Total locked up rewards
     uint256 public totalLockedUpRewards;
 
-    // Panther referral contract address.
-    IPantherReferral public pantherReferral;
+    // Plants referral contract address.
+    IPlantsReferral public plantsReferral;
     // Referral commission rate in basis points.
     uint16 public referralCommissionRate = 100;
     // Max referral commission rate: 10%.
@@ -84,19 +84,35 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event EmissionRateUpdated(address indexed caller, uint256 previousAmount, uint256 newAmount);
-    event ReferralCommissionPaid(address indexed user, address indexed referrer, uint256 commissionAmount);
-    event RewardLockedUp(address indexed user, uint256 indexed pid, uint256 amountLockedUp);
+    event EmergencyWithdraw(
+        address indexed user,
+        uint256 indexed pid,
+        uint256 amount
+    );
+    event EmissionRateUpdated(
+        address indexed caller,
+        uint256 previousAmount,
+        uint256 newAmount
+    );
+    event ReferralCommissionPaid(
+        address indexed user,
+        address indexed referrer,
+        uint256 commissionAmount
+    );
+    event RewardLockedUp(
+        address indexed user,
+        uint256 indexed pid,
+        uint256 amountLockedUp
+    );
 
     constructor(
-        PantherToken _panther,
+        PlantsToken _plants,
         uint256 _startBlock,
-        uint256 _pantherPerBlock
+        uint256 _plantsPerBlock
     ) public {
-        panther = _panther;
+        plants = _plants;
         startBlock = _startBlock;
-        pantherPerBlock = _pantherPerBlock;
+        plantsPerBlock = _plantsPerBlock;
 
         devAddress = msg.sender;
         feeAddress = msg.sender;
@@ -108,59 +124,107 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Add a new lp to the pool. Can only be called by the owner.
     // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
-    function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, uint256 _harvestInterval, bool _withUpdate) public onlyOwner {
-        require(_depositFeeBP <= 10000, "add: invalid deposit fee basis points");
-        require(_harvestInterval <= MAXIMUM_HARVEST_INTERVAL, "add: invalid harvest interval");
+    function add(
+        uint256 _allocPoint,
+        IBEP20 _lpToken,
+        uint16 _depositFeeBP,
+        uint256 _harvestInterval,
+        bool _withUpdate
+    ) public onlyOwner {
+        require(
+            _depositFeeBP <= 10000,
+            "add: invalid deposit fee basis points"
+        );
+        require(
+            _harvestInterval <= MAXIMUM_HARVEST_INTERVAL,
+            "add: invalid harvest interval"
+        );
         if (_withUpdate) {
             massUpdatePools();
         }
-        uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
+        uint256 lastRewardBlock =
+            block.number > startBlock ? block.number : startBlock;
         totalAllocPoint = totalAllocPoint.add(_allocPoint);
-        poolInfo.push(PoolInfo({
-            lpToken: _lpToken,
-            allocPoint: _allocPoint,
-            lastRewardBlock: lastRewardBlock,
-            accPantherPerShare: 0,
-            depositFeeBP: _depositFeeBP,
-            harvestInterval: _harvestInterval
-        }));
+        poolInfo.push(
+            PoolInfo({
+                lpToken: _lpToken,
+                allocPoint: _allocPoint,
+                lastRewardBlock: lastRewardBlock,
+                accPlantsPerShare: 0,
+                depositFeeBP: _depositFeeBP,
+                harvestInterval: _harvestInterval
+            })
+        );
     }
 
     // Update the given pool's PANTHER allocation point and deposit fee. Can only be called by the owner.
-    function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, uint256 _harvestInterval, bool _withUpdate) public onlyOwner {
-        require(_depositFeeBP <= 10000, "set: invalid deposit fee basis points");
-        require(_harvestInterval <= MAXIMUM_HARVEST_INTERVAL, "set: invalid harvest interval");
+    function set(
+        uint256 _pid,
+        uint256 _allocPoint,
+        uint16 _depositFeeBP,
+        uint256 _harvestInterval,
+        bool _withUpdate
+    ) public onlyOwner {
+        require(
+            _depositFeeBP <= 10000,
+            "set: invalid deposit fee basis points"
+        );
+        require(
+            _harvestInterval <= MAXIMUM_HARVEST_INTERVAL,
+            "set: invalid harvest interval"
+        );
         if (_withUpdate) {
             massUpdatePools();
         }
-        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
+        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(
+            _allocPoint
+        );
         poolInfo[_pid].allocPoint = _allocPoint;
         poolInfo[_pid].depositFeeBP = _depositFeeBP;
         poolInfo[_pid].harvestInterval = _harvestInterval;
     }
 
     // Return reward multiplier over the given _from to _to block.
-    function getMultiplier(uint256 _from, uint256 _to) public pure returns (uint256) {
+    function getMultiplier(uint256 _from, uint256 _to)
+        public
+        pure
+        returns (uint256)
+    {
         return _to.sub(_from).mul(BONUS_MULTIPLIER);
     }
 
     // View function to see pending PANTHERs on frontend.
-    function pendingPanther(uint256 _pid, address _user) external view returns (uint256) {
+    function pendingPlants(uint256 _pid, address _user)
+        external
+        view
+        returns (uint256)
+    {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
-        uint256 accPantherPerShare = pool.accPantherPerShare;
+        uint256 accPlantsPerShare = pool.accPlantsPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-            uint256 pantherReward = multiplier.mul(pantherPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-            accPantherPerShare = accPantherPerShare.add(pantherReward.mul(1e12).div(lpSupply));
+            uint256 multiplier =
+                getMultiplier(pool.lastRewardBlock, block.number);
+            uint256 plantsReward =
+                multiplier.mul(plantsPerBlock).mul(pool.allocPoint).div(
+                    totalAllocPoint
+                );
+            accPlantsPerShare = accPlantsPerShare.add(
+                plantsReward.mul(1e12).div(lpSupply)
+            );
         }
-        uint256 pending = user.amount.mul(accPantherPerShare).div(1e12).sub(user.rewardDebt);
+        uint256 pending =
+            user.amount.mul(accPlantsPerShare).div(1e12).sub(user.rewardDebt);
         return pending.add(user.rewardLockedUp);
     }
 
     // View function to see if user can harvest PANTHERs.
-    function canHarvest(uint256 _pid, address _user) public view returns (bool) {
+    function canHarvest(uint256 _pid, address _user)
+        public
+        view
+        returns (bool)
+    {
         UserInfo storage user = userInfo[_pid][_user];
         return block.timestamp >= user.nextHarvestUntil;
     }
@@ -185,26 +249,45 @@ contract MasterChef is Ownable, ReentrancyGuard {
             return;
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-        uint256 pantherReward = multiplier.mul(pantherPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        panther.mint(devAddress, pantherReward.div(10));
-        panther.mint(address(this), pantherReward);
-        pool.accPantherPerShare = pool.accPantherPerShare.add(pantherReward.mul(1e12).div(lpSupply));
+        uint256 plantsReward =
+            multiplier.mul(plantsPerBlock).mul(pool.allocPoint).div(
+                totalAllocPoint
+            );
+        plants.mint(devAddress, plantsReward.div(10));
+        plants.mint(address(this), plantsReward);
+        pool.accPlantsPerShare = pool.accPlantsPerShare.add(
+            plantsReward.mul(1e12).div(lpSupply)
+        );
         pool.lastRewardBlock = block.number;
     }
 
     // Deposit LP tokens to MasterChef for PANTHER allocation.
-    function deposit(uint256 _pid, uint256 _amount, address _referrer) public nonReentrant {
+    function deposit(
+        uint256 _pid,
+        uint256 _amount,
+        address _referrer
+    ) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
-        if (_amount > 0 && address(pantherReferral) != address(0) && _referrer != address(0) && _referrer != msg.sender) {
-            pantherReferral.recordReferral(msg.sender, _referrer);
+        if (
+            _amount > 0 &&
+            address(plantsReferral) != address(0) &&
+            _referrer != address(0) &&
+            _referrer != msg.sender
+        ) {
+            plantsReferral.recordReferral(msg.sender, _referrer);
         }
-        payOrLockupPendingPanther(_pid);
+        payOrLockupPendingPlants(_pid);
         if (_amount > 0) {
-            pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-            if (address(pool.lpToken) == address(panther)) {
-                uint256 transferTax = _amount.mul(panther.transferTaxRate()).div(10000);
+            pool.lpToken.safeTransferFrom(
+                address(msg.sender),
+                address(this),
+                _amount
+            );
+            if (address(pool.lpToken) == address(plants)) {
+                uint256 transferTax =
+                    _amount.mul(plants.transferTaxRate()).div(10000);
                 _amount = _amount.sub(transferTax);
             }
             if (pool.depositFeeBP > 0) {
@@ -215,7 +298,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
                 user.amount = user.amount.add(_amount);
             }
         }
-        user.rewardDebt = user.amount.mul(pool.accPantherPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accPlantsPerShare).div(1e12);
         emit Deposit(msg.sender, _pid, _amount);
     }
 
@@ -225,12 +308,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
-        payOrLockupPendingPanther(_pid);
+        payOrLockupPendingPlants(_pid);
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
         }
-        user.rewardDebt = user.amount.mul(pool.accPantherPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accPlantsPerShare).div(1e12);
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
@@ -248,7 +331,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     }
 
     // Pay or lockup pending PANTHERs.
-    function payOrLockupPendingPanther(uint256 _pid) internal {
+    function payOrLockupPendingPlants(uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 
@@ -256,18 +339,25 @@ contract MasterChef is Ownable, ReentrancyGuard {
             user.nextHarvestUntil = block.timestamp.add(pool.harvestInterval);
         }
 
-        uint256 pending = user.amount.mul(pool.accPantherPerShare).div(1e12).sub(user.rewardDebt);
+        uint256 pending =
+            user.amount.mul(pool.accPlantsPerShare).div(1e12).sub(
+                user.rewardDebt
+            );
         if (canHarvest(_pid, msg.sender)) {
             if (pending > 0 || user.rewardLockedUp > 0) {
                 uint256 totalRewards = pending.add(user.rewardLockedUp);
 
                 // reset lockup
-                totalLockedUpRewards = totalLockedUpRewards.sub(user.rewardLockedUp);
+                totalLockedUpRewards = totalLockedUpRewards.sub(
+                    user.rewardLockedUp
+                );
                 user.rewardLockedUp = 0;
-                user.nextHarvestUntil = block.timestamp.add(pool.harvestInterval);
+                user.nextHarvestUntil = block.timestamp.add(
+                    pool.harvestInterval
+                );
 
                 // send rewards
-                safePantherTransfer(msg.sender, totalRewards);
+                safePlantsTransfer(msg.sender, totalRewards);
                 payReferralCommission(msg.sender, totalRewards);
             }
         } else if (pending > 0) {
@@ -277,13 +367,13 @@ contract MasterChef is Ownable, ReentrancyGuard {
         }
     }
 
-    // Safe panther transfer function, just in case if rounding error causes pool to not have enough PANTHERs.
-    function safePantherTransfer(address _to, uint256 _amount) internal {
-        uint256 pantherBal = panther.balanceOf(address(this));
-        if (_amount > pantherBal) {
-            panther.transfer(_to, pantherBal);
+    // Safe plants transfer function, just in case if rounding error causes pool to not have enough PANTHERs.
+    function safePlantsTransfer(address _to, uint256 _amount) internal {
+        uint256 plantsBal = plants.balanceOf(address(this));
+        if (_amount > plantsBal) {
+            plants.transfer(_to, plantsBal);
         } else {
-            panther.transfer(_to, _amount);
+            plants.transfer(_to, _amount);
         }
     }
 
@@ -301,32 +391,47 @@ contract MasterChef is Ownable, ReentrancyGuard {
     }
 
     // Pancake has to add hidden dummy pools in order to alter the emission, here we make it simple and transparent to all.
-    function updateEmissionRate(uint256 _pantherPerBlock) public onlyOwner {
+    function updateEmissionRate(uint256 _plantsPerBlock) public onlyOwner {
         massUpdatePools();
-        emit EmissionRateUpdated(msg.sender, pantherPerBlock, _pantherPerBlock);
-        pantherPerBlock = _pantherPerBlock;
+        emit EmissionRateUpdated(msg.sender, plantsPerBlock, _plantsPerBlock);
+        plantsPerBlock = _plantsPerBlock;
     }
 
-    // Update the panther referral contract address by the owner
-    function setPantherReferral(IPantherReferral _pantherReferral) public onlyOwner {
-        pantherReferral = _pantherReferral;
+    // Update the plants referral contract address by the owner
+    function setPlantsReferral(IPlantsReferral _plantsReferral)
+        public
+        onlyOwner
+    {
+        plantsReferral = _plantsReferral;
     }
 
     // Update referral commission rate by the owner
-    function setReferralCommissionRate(uint16 _referralCommissionRate) public onlyOwner {
-        require(_referralCommissionRate <= MAXIMUM_REFERRAL_COMMISSION_RATE, "setReferralCommissionRate: invalid referral commission rate basis points");
+    function setReferralCommissionRate(uint16 _referralCommissionRate)
+        public
+        onlyOwner
+    {
+        require(
+            _referralCommissionRate <= MAXIMUM_REFERRAL_COMMISSION_RATE,
+            "setReferralCommissionRate: invalid referral commission rate basis points"
+        );
         referralCommissionRate = _referralCommissionRate;
     }
 
     // Pay referral commission to the referrer who referred this user.
     function payReferralCommission(address _user, uint256 _pending) internal {
-        if (address(pantherReferral) != address(0) && referralCommissionRate > 0) {
-            address referrer = pantherReferral.getReferrer(_user);
-            uint256 commissionAmount = _pending.mul(referralCommissionRate).div(10000);
+        if (
+            address(plantsReferral) != address(0) && referralCommissionRate > 0
+        ) {
+            address referrer = plantsReferral.getReferrer(_user);
+            uint256 commissionAmount =
+                _pending.mul(referralCommissionRate).div(10000);
 
             if (referrer != address(0) && commissionAmount > 0) {
-                panther.mint(referrer, commissionAmount);
-                pantherReferral.recordReferralCommission(referrer, commissionAmount);
+                plants.mint(referrer, commissionAmount);
+                plantsReferral.recordReferralCommission(
+                    referrer,
+                    commissionAmount
+                );
                 emit ReferralCommissionPaid(_user, referrer, commissionAmount);
             }
         }
