@@ -27,7 +27,9 @@ contract PantherVoteProxy {
     uint256 public pantherPoolPid = 9;
     // Trading Pairs
     address public pantherBNB = 0xC24AD5197DaeFD97DF28C70AcbDF17d9fF92a49B;
+    uint256 public pantherBNBFarmPid = 17;
     address public pantherBUSD = 0x9287F5Ad55D7eE8EAE90B865718EB9A7cF3fb71A;
+    uint256 public pantherBUSDFarmPid = 16;
     // Vaults
     address public autoSharkPantherPool = 0x2Bc66d715FB0887A8708eCa5d83826eB063ba551;
 
@@ -36,11 +38,11 @@ contract PantherVoteProxy {
     }
 
     function name() external pure returns (string memory) {
-        return 'PantherToken Vote Proxy';
+        return "PantherToken Vote Proxy";
     }
 
     function symbol() external pure returns (string memory) {
-        return 'PANTHER-VOTE';
+        return "PANTHER-VOTE";
     }
 
     function totalSupply() external view returns (uint256) {
@@ -55,18 +57,18 @@ contract PantherVoteProxy {
         // panther in panther pool
         balance = balance.add(IMasterChef(masterChef).userInfo(pantherPoolPid, _voter).amount);
         // panther in PANTHER-BNB liquidity pool
-        balance = balance.add(balanceInTradingPair(pantherBNB, _voter));
+        balance = balance.add(balanceInLiquidityPoolAndFarm(pantherBNB, pantherBNBFarmPid, _voter));
         // panther in PANTHER-BUSD liquidity pool
-        balance = balance.add(balanceInTradingPair(pantherBUSD, _voter));
+        balance = balance.add(balanceInLiquidityPoolAndFarm(pantherBUSD, pantherBUSDFarmPid, _voter));
         // panther in vaults
         balance = balance.add(IBEP20(autoSharkPantherPool).balanceOf(_voter));
 
         return balance;
     }
 
-    function balanceInTradingPair(address pair, address _voter) private view returns (uint256) {
+    function balanceInLiquidityPoolAndFarm(address pair, uint256 pid, address _voter) private view returns (uint256) {
         uint256 lpTotalSupply = IBEP20(pair).totalSupply();
-        uint256 voterLpBalance = IBEP20(pair).balanceOf(_voter);
+        uint256 voterLpBalance = IBEP20(pair).balanceOf(_voter).add(IMasterChef(masterChef).userInfo(pid, _voter).amount);
         uint256 pantherInLp = IBEP20(panther).balanceOf(pair);
 
         if (lpTotalSupply > 0) {
@@ -75,6 +77,4 @@ contract PantherVoteProxy {
 
         return 0;
     }
-
-    constructor() public {}
 }
