@@ -1,19 +1,6 @@
-// COPIED FROM https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/GovernorAlpha.sol
-// Copyright 2020 Compound Labs, Inc.
-// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Ctrl+f for XXX to see all the modifications.
-
 // SPDX-License-Identifier: MIT
-
-// XXX: pragma solidity ^0.5.16;
 pragma solidity 0.6.12;
 
-// XXX: import "./SafeMath.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 contract Timelock {
@@ -22,8 +9,8 @@ contract Timelock {
     event NewAdmin(address indexed newAdmin);
     event NewPendingAdmin(address indexed newPendingAdmin);
     event NewDelay(uint indexed newDelay);
-    event CancelTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature,  bytes data, uint eta);
-    event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature,  bytes data, uint eta);
+    event CancelTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
+    event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
     event QueueTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
 
     uint public constant GRACE_PERIOD = 14 days;
@@ -33,10 +20,9 @@ contract Timelock {
     address public admin;
     address public pendingAdmin;
     uint public delay;
-    bool public admin_initialized;
+    bool public adminInitialized;
 
     mapping (bytes32 => bool) public queuedTransactions;
-
 
     constructor(address admin_, uint delay_) public {
         require(delay_ >= MINIMUM_DELAY, "Timelock::constructor: Delay must exceed minimum delay.");
@@ -44,10 +30,9 @@ contract Timelock {
 
         admin = admin_;
         delay = delay_;
-        admin_initialized = false;
+        adminInitialized = false;
     }
 
-    // XXX: function() external payable { }
     receive() external payable { }
 
     function setDelay(uint delay_) public {
@@ -68,12 +53,11 @@ contract Timelock {
     }
 
     function setPendingAdmin(address pendingAdmin_) public {
-        // allows one time setting of admin for deployment purposes
-        if (admin_initialized) {
+        if (adminInitialized) {
             require(msg.sender == address(this), "Timelock::setPendingAdmin: Call must come from Timelock.");
         } else {
             require(msg.sender == admin, "Timelock::setPendingAdmin: First call must come from admin.");
-            admin_initialized = true;
+            adminInitialized = true;
         }
         pendingAdmin = pendingAdmin_;
 
@@ -110,16 +94,9 @@ contract Timelock {
 
         queuedTransactions[txHash] = false;
 
-        bytes memory callData;
+        bytes memory callData = bytes(signature).length == 0 ? data : abi.encodePacked(bytes4(keccak256(bytes(signature))), data);
 
-        if (bytes(signature).length == 0) {
-            callData = data;
-        } else {
-            callData = abi.encodePacked(bytes4(keccak256(bytes(signature))), data);
-        }
-
-        // solium-disable-next-line security/no-call-value
-        (bool success, bytes memory returnData) = target.call.value(value)(callData);
+        (bool success, bytes memory returnData) = target.call{value: value}(callData);
         require(success, "Timelock::executeTransaction: Transaction execution reverted.");
 
         emit ExecuteTransaction(txHash, target, value, signature, data, eta);
@@ -128,7 +105,6 @@ contract Timelock {
     }
 
     function getBlockTimestamp() internal view returns (uint) {
-        // solium-disable-next-line security/no-block-members
         return block.timestamp;
     }
 }
